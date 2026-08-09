@@ -42,6 +42,17 @@ class DBAdapter:
         return {r["email_id"] for r in records if "email_id" in r}
 
     @staticmethod
+    def get_tasks_by_candidate(candidate_id: str) -> Dict[str, Dict[str, Any]]:
+        db = get_mongo_db()
+        cursor = db.tasks.find({"candidate_id": candidate_id}, {"_id": 0})
+        return {t["thread_id"]: t for t in cursor if "thread_id" in t}
+
+    @staticmethod
+    def get_task_by_source_email(source_email_id: str) -> Optional[Dict[str, Any]]:
+        db = get_mongo_db()
+        return db.tasks.find_one({"source_email_id": source_email_id}, {"_id": 0})
+
+    @staticmethod
     def bulk_save_ingest(
         candidate_id: str,
         tasks_to_insert: List[Dict[str, Any]],

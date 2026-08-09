@@ -38,6 +38,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
+
 @app.get("/")
 def read_root():
     return {
@@ -202,7 +214,7 @@ def ingest_emails(payload: IngestRequest):
             })
 
     # Execute single bulk save to database
-    DBAdapter.bulk_save_ingest(new_tasks, updated_tasks, processed_metas)
+    DBAdapter.bulk_save_ingest(cand_id, new_tasks, updated_tasks, processed_metas)
 
     return IngestResponse(
         processed=len(payload.emails),
