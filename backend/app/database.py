@@ -3,11 +3,11 @@ from typing import Dict, Any, List, Optional, Set
 from pymongo import MongoClient
 
 raw_uri = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@cluster0.8zol7ke.mongodb.net/?appName=Cluster0")
-if "tlsInsecure" not in raw_uri and "tlsAllowInvalidCertificates" not in raw_uri:
+if "tlsAllowInvalidCertificates" not in raw_uri and "tlsInsecure" not in raw_uri:
     if "?" in raw_uri:
-        MONGODB_URI = raw_uri + "&tlsInsecure=true"
+        MONGODB_URI = raw_uri + "&tlsAllowInvalidCertificates=true"
     else:
-        MONGODB_URI = raw_uri + "?tlsInsecure=true"
+        MONGODB_URI = raw_uri + "?tlsAllowInvalidCertificates=true"
 else:
     MONGODB_URI = raw_uri
 
@@ -16,6 +16,7 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
 def get_mongo_db():
     return MongoClient(
         MONGODB_URI,
+        tlsAllowInvalidCertificates=True,
         serverSelectionTimeoutMS=10000
     )[MONGODB_DB_NAME]
 
