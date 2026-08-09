@@ -8,8 +8,7 @@ MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
 def get_mongo_db():
     return MongoClient(
         MONGODB_URI,
-        tls=True,
-        tlsAllowInvalidCertificates=True,
+        tlsInsecure=True,
         serverSelectionTimeoutMS=10000
     )[MONGODB_DB_NAME]
 
