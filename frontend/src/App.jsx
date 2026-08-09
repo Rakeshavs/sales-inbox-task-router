@@ -88,11 +88,14 @@ export default function App() {
         setStats({ processed: 0, tasks_created: 0, tasks_updated: 0, skipped: 0 });
         setActiveQueueTab('raw_table');
 
+        await fetchStats();
+        await fetchLiveTasks();
+
         setChatMessages(prev => [
           ...prev,
           {
             sender: 'system',
-            text: `🧹 Database Cleared! Deleted ${result.deleted_tasks} tasks and ${result.deleted_emails} processed records for ${candidateId} in MongoDB Atlas. All counters and tables reset to 0.`,
+            text: `🧹 Database Cleared! Deleted ${result.deleted_tasks} tasks and ${result.deleted_emails} processed records for ${candidateId} in MongoDB Atlas. All counters reset to 0.`,
             supportingData: result
           }
         ]);
