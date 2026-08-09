@@ -135,41 +135,57 @@ export default function App() {
     }
 
     setIsProcessing(true);
-    try {
-      const batchToSend = parsedEmails.slice(0, 100);
-      const res = await fetch(`${API_BASE}/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          candidate_id: candidateId,
-          emails: batchToSend
-        })
-      });
+    let totalProcessed = 0;
+    let totalCreated = 0;
+    let totalUpdated = 0;
+    let totalSkipped = 0;
 
-      if (res.ok) {
-        const result = await res.json();
-        await fetchStats();
-        await fetchLiveTasks();
-        
-        setChatMessages(prev => [
-          ...prev,
-          {
-            sender: 'system',
-            text: `✅ Ingested batch of ${result.processed} emails!\n• Tasks Created: ${result.tasks_created}\n• Thread Updates: ${result.tasks_updated}\n• Skipped Noise: ${result.skipped}`,
-            supportingData: {
-              processed: result.processed,
-              tasks_created: result.tasks_created,
-              tasks_updated: result.tasks_updated,
-              skipped: result.skipped
-            }
-          }
-        ]);
-      } else {
-        const err = await res.json();
-        alert(`Ingest Error: ${err.detail || 'Failed to ingest batch'}`);
+    const emailsToProcess = parsedEmails.slice(0, 100);
+    const chunkSize = 20;
+
+    try {
+      for (let i = 0; i < emailsToProcess.length; i += chunkSize) {
+        const chunk = emailsToProcess.slice(i, i + chunkSize);
+        const res = await fetch(`${API_BASE}/ingest`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            candidate_id: candidateId,
+            emails: chunk
+          })
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          totalProcessed += result.processed;
+          totalCreated += result.tasks_created;
+          totalUpdated += result.tasks_updated;
+          totalSkipped += result.skipped;
+
+          await fetchStats();
+          await fetchLiveTasks();
+        } else {
+          const err = await res.json();
+          alert(`Ingest Error: ${err.detail || 'Failed to ingest batch chunk'}`);
+          break;
+        }
       }
+
+      setChatMessages(prev => [
+        ...prev,
+        {
+          sender: 'system',
+          text: `✅ Ingested batch of ${totalProcessed} emails!\n• Tasks Created: ${totalCreated}\n• Thread Updates: ${totalUpdated}\n• Skipped Noise: ${totalSkipped}`,
+          supportingData: {
+            processed: totalProcessed,
+            tasks_created: totalCreated,
+            tasks_updated: totalUpdated,
+            skipped: totalSkipped
+          }
+        }
+      ]);
     } catch (e) {
-      alert("Network error executing /ingest");
+      alert(`Network error executing /ingest: ${e.message}`);
     } finally {
       setIsProcessing(false);
     }
