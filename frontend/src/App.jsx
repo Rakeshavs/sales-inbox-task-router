@@ -466,7 +466,7 @@ export default function App() {
               onClick={() => setActiveQueueTab('raw_table')}
             >
               <Table className="w-4 h-4" /> All Processed Input
-              <span className="queue-count-badge">{parsedEmails.length}</span>
+              <span className="queue-count-badge">{stats.processed}</span>
             </button>
 
             {Object.keys(teamRosterMap).map((id) => {
