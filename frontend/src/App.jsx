@@ -70,10 +70,6 @@ export default function App() {
   };
 
   const handleResetDatabase = async () => {
-    if (!window.confirm(`Are you sure you want to clear all data for candidate ${candidateId} from MongoDB Atlas?`)) {
-      return;
-    }
-
     setIsClearing(true);
     try {
       const res = await fetch(`${API_BASE}/api/reset?candidate_id=${encodeURIComponent(candidateId)}`, {
