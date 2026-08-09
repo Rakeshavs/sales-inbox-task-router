@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Upload, Sparkles, Database, MessageSquare, Table, RefreshCw, DatabaseZap, CheckCircle2, AlertCircle, HelpCircle, Mail, Layers, ShieldCheck, Filter, UserCheck, Tag, ArrowRight, Users, Briefcase, DollarSign, Megaphone, Handshake, AlertTriangle } from 'lucide-react';
 
-const rawApiBase = import.meta.env.VITE_API_URL || 'https://sales-inbox-task-router-qgl7.onrender.com';
-const API_BASE = rawApiBase.replace(/\/+$/, '');
+const API_BASE = 'https://sales-inbox-task-router-qgl7.onrender.com';
 
 export default function App() {
   const [candidateId, setCandidateId] = useState('medharirakeshavs@gmail.com');
