@@ -10,7 +10,7 @@ def get_mongo_db():
     return MongoClient(
         MONGODB_URI,
         tls=True,
-        tlsCAFile=certifi.where(),
+        tlsAllowInvalidCertificates=True,
         tlsAllowInvalidHostnames=True,
         serverSelectionTimeoutMS=10000
     )[MONGODB_DB_NAME]
