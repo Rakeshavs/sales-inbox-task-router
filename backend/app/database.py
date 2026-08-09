@@ -3,17 +3,15 @@ import certifi
 from typing import Dict, Any, List, Optional, Set
 from pymongo import MongoClient
 
-raw_uri = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@cluster0.8zol7ke.mongodb.net/?appName=Cluster0")
+raw_uri = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@cluster0.8zol7ke.mongodb.net/?appName=Cluster0").strip().strip('"').strip("'")
 
 if "tlsAllowInvalidCertificates" not in raw_uri:
-    if "?" in raw_uri:
-        MONGODB_URI = raw_uri + "&tlsAllowInvalidCertificates=true&tlsAllowInvalidHostnames=true"
-    else:
-        MONGODB_URI = raw_uri + "?tlsAllowInvalidCertificates=true&tlsAllowInvalidHostnames=true"
+    sep = "&" if "?" in raw_uri else "?"
+    MONGODB_URI = f"{raw_uri}{sep}tls=true&tlsAllowInvalidCertificates=true&tlsAllowInvalidHostnames=true"
 else:
     MONGODB_URI = raw_uri
 
-MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
+MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db").strip().strip('"').strip("'")
 
 def get_mongo_db():
     return MongoClient(
