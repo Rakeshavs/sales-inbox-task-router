@@ -3,7 +3,7 @@ import { Send, Upload, Sparkles, Database, MessageSquare, Table, RefreshCw, Data
 
 const getApiBase = () => {
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    return 'http://127.0.0.1:8000';
+    return '';
   }
   const raw = import.meta.env.VITE_API_URL || 'https://sales-inbox-task-router-qgl7.onrender.com';
   return raw.replace(/\/+$/, '');
