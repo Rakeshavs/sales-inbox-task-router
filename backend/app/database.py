@@ -114,9 +114,21 @@ class DBAdapter:
                 pass
 
     @staticmethod
-    def list_tasks(candidate_id: str) -> List[Dict[str, Any]]:
+    def list_tasks(
+        candidate_id: str,
+        thread_id: Optional[str] = None,
+        source_email_id: Optional[str] = None,
+        assignee_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         db = get_mongo_db()
-        cursor = db.tasks.find({"candidate_id": candidate_id}, {"_id": 0})
+        query = {"candidate_id": candidate_id}
+        if thread_id:
+            query["thread_id"] = thread_id
+        if source_email_id:
+            query["source_email_id"] = source_email_id
+        if assignee_id:
+            query["assignee_id"] = assignee_id
+        cursor = db.tasks.find(query, {"_id": 0})
         return list(cursor)
 
     @staticmethod
