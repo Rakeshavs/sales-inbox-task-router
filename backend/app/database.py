@@ -6,13 +6,27 @@ from pymongo import MongoClient
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@cluster0.8zol7ke.mongodb.net/?appName=Cluster0")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
 
+DIRECT_SEEDLIST_URI = "mongodb://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@ac-yni67in-shard-00-00.8zol7ke.mongodb.net:27017,ac-yni67in-shard-00-01.8zol7ke.mongodb.net:27017,ac-yni67in-shard-00-02.8zol7ke.mongodb.net:27017/sales_router_db?replicaSet=atlas-yni67in-shard-0&ssl=true&authSource=admin&tlsAllowInvalidCertificates=true"
+
 def get_mongo_db():
-    return MongoClient(
-        MONGODB_URI,
-        tls=True,
-        tlsAllowInvalidCertificates=True,
-        serverSelectionTimeoutMS=10000
-    )[MONGODB_DB_NAME]
+    try:
+        client = MongoClient(
+            MONGODB_URI,
+            tls=True,
+            tlsAllowInvalidCertificates=True,
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=5000
+        )
+        client.admin.command('ping')
+        return client[MONGODB_DB_NAME]
+    except Exception:
+        # Fallback to direct replica set seedlist string (bypasses SRV OpenSSL SNI alerts on Linux containers)
+        client = MongoClient(
+            DIRECT_SEEDLIST_URI,
+            tlsAllowInvalidCertificates=True,
+            serverSelectionTimeoutMS=5000
+        )
+        return client[MONGODB_DB_NAME]
 
 def init_db():
     """Initializes MongoDB Atlas indexes on startup"""
