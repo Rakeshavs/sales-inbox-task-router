@@ -148,7 +148,7 @@ export default function App() {
     let totalUpdated = 0;
     let totalSkipped = 0;
 
-    const emailsToProcess = parsedEmails.slice(0, 100);
+    const emailsToProcess = parsedEmails;
     const chunkSize = 20;
 
     try {
@@ -179,11 +179,14 @@ export default function App() {
         }
       }
 
+      // Auto-select u_aarti queue tab so assigned tasks are immediately visible to user
+      setActiveQueueTab('u_aarti');
+
       setChatMessages(prev => [
         ...prev,
         {
           sender: 'system',
-          text: `✅ Ingested batch of ${totalProcessed} emails!\n• Tasks Created: ${totalCreated}\n• Thread Updates: ${totalUpdated}\n• Skipped Noise: ${totalSkipped}`,
+          text: `✅ Ingested entire batch of ${totalProcessed} emails!\n• Tasks Created & Assigned: ${totalCreated}\n• Thread Updates: ${totalUpdated}\n• Noise Filtered Out: ${totalSkipped}\n\nCheck team member tabs (Aarti, Rohit, Meera, Karan, Divya, Triage) to see assigned tasks!`,
           supportingData: {
             processed: totalProcessed,
             tasks_created: totalCreated,
