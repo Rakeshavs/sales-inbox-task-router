@@ -137,16 +137,18 @@ class DBAdapter:
         processed_cnt = db.processed_emails.count_documents({"candidate_id": candidate_id})
         tasks_cnt = db.tasks.count_documents({"candidate_id": candidate_id})
         
-        # Estimate updated threads and skipped
-        updated_cnt = db.tasks.count_documents({
-            "candidate_id": candidate_id,
-            "updated_at": {"$ne": None}
-        })
-        skipped_cnt = max(0, processed_cnt - tasks_cnt - updated_cnt)
+        created_cnt = db.processed_emails.count_documents({"candidate_id": candidate_id, "status": "created"})
+        updated_cnt = db.processed_emails.count_documents({"candidate_id": candidate_id, "status": "updated"})
+        skipped_cnt = db.processed_emails.count_documents({"candidate_id": candidate_id, "status": "skipped"})
+
+        if created_cnt == 0 and tasks_cnt > 0:
+            created_cnt = tasks_cnt
+            updated_cnt = 0
+            skipped_cnt = max(0, processed_cnt - tasks_cnt)
 
         return {
             "processed": processed_cnt,
-            "tasks_created": tasks_cnt,
+            "tasks_created": created_cnt,
             "tasks_updated": updated_cnt,
             "skipped": skipped_cnt
         }

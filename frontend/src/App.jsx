@@ -86,12 +86,13 @@ export default function App() {
         setRawJsonText('');
         setDbTasks([]);
         setStats({ processed: 0, tasks_created: 0, tasks_updated: 0, skipped: 0 });
+        setActiveQueueTab('raw_table');
 
         setChatMessages(prev => [
           ...prev,
           {
             sender: 'system',
-            text: `🧹 Database Cleared! Deleted ${result.deleted_tasks} tasks and ${result.deleted_emails} processed records for ${candidateId} in MongoDB Atlas. Counters reset to 0.`,
+            text: `🧹 Database Cleared! Deleted ${result.deleted_tasks} tasks and ${result.deleted_emails} processed records for ${candidateId} in MongoDB Atlas. All counters and tables reset to 0.`,
             supportingData: result
           }
         ]);
@@ -128,6 +129,16 @@ export default function App() {
         const data = await res.json();
         setParsedEmails(data.emails);
         setRawJsonText(JSON.stringify(data.emails, null, 2));
+        setActiveQueueTab('raw_table');
+
+        setChatMessages(prev => [
+          ...prev,
+          {
+            sender: 'system',
+            text: `🎲 Generated ${data.emails.length} sample emails matching inbox.json schema! Click 'Process & Route Batch (/ingest)' to classify and route them.`,
+            supportingData: { sample_count: data.emails.length }
+          }
+        ]);
       }
     } catch (e) {
       alert("Error generating sample email batch");
@@ -337,6 +348,16 @@ export default function App() {
               onChange={(e) => setCandidateId(e.target.value)}
             />
           </div>
+
+          <button
+            className="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+            onClick={handleResetDatabase}
+            disabled={isClearing}
+            title="Clear all database records for this candidate in MongoDB Atlas"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isClearing ? 'animate-spin' : ''}`} />
+            {isClearing ? "Clearing DB..." : "Reset Candidate DB"}
+          </button>
         </div>
       </nav>
 
