@@ -53,6 +53,16 @@ class DBAdapter:
         return db.tasks.find_one({"source_email_id": source_email_id}, {"_id": 0})
 
     @staticmethod
+    def insert_task(task_dict: Dict[str, Any]):
+        db = get_mongo_db()
+        db.tasks.insert_one(task_dict)
+
+    @staticmethod
+    def get_task_by_id(task_id: str) -> Optional[Dict[str, Any]]:
+        db = get_mongo_db()
+        return db.tasks.find_one({"task_id": task_id}, {"_id": 0})
+
+    @staticmethod
     def bulk_save_ingest(
         candidate_id: str,
         tasks_to_insert: List[Dict[str, Any]],
