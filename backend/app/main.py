@@ -1,7 +1,13 @@
 import os
+import sys
 import datetime
 import uuid
 from typing import List, Optional
+
+# Ensure backend directory and app package are in sys.path
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
