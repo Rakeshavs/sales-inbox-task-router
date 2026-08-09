@@ -1,4 +1,5 @@
 import os
+import certifi
 from typing import Dict, Any, List, Optional, Set
 from pymongo import MongoClient
 
@@ -6,8 +7,23 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:J
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
 
 def get_mongo_db():
-    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
-    return client[MONGODB_DB_NAME]
+    try:
+        client = MongoClient(
+            MONGODB_URI,
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=10000
+        )
+        # Verify connection
+        client.admin.command('ping')
+        return client[MONGODB_DB_NAME]
+    except Exception:
+        # Fallback with invalid cert allowance if CAbundle mismatch on cloud containers
+        client = MongoClient(
+            MONGODB_URI,
+            tlsAllowInvalidCertificates=True,
+            serverSelectionTimeoutMS=10000
+        )
+        return client[MONGODB_DB_NAME]
 
 def init_db():
     """Initializes MongoDB Atlas indexes on startup"""

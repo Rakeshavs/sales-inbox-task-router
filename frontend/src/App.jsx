@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Upload, Sparkles, Database, MessageSquare, Table, RefreshCw, DatabaseZap, CheckCircle2, AlertCircle, HelpCircle, Mail, Layers, ShieldCheck, Filter, UserCheck, Tag, ArrowRight, Users, Briefcase, DollarSign, Megaphone, Handshake, AlertTriangle } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 export default function App() {
   const [candidateId, setCandidateId] = useState('medharirakeshavs@gmail.com');
   const [rawJsonText, setRawJsonText] = useState('');
@@ -24,7 +26,7 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState([
     {
       sender: 'system',
-      text: 'Hello! I am your Sales Inbox Operations Assistant. Route email batches, view team member task queues, reassign triage items, or click "Clear DB (Reset to 0)" to start fresh from 0.',
+      text: 'Hello! I am your Sales Inbox Operations Assistant. Route email batches, view team member task queues, or ask natural language questions about processed data.',
       supportingData: null
     }
   ]);
@@ -37,7 +39,7 @@ export default function App() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch(`/api/stats?candidate_id=${encodeURIComponent(candidateId)}`);
+      const res = await fetch(`${API_BASE}/api/stats?candidate_id=${encodeURIComponent(candidateId)}`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -49,7 +51,7 @@ export default function App() {
 
   const fetchLiveTasks = async () => {
     try {
-      const res = await fetch(`/tasks?candidate_id=${encodeURIComponent(candidateId)}`);
+      const res = await fetch(`${API_BASE}/tasks?candidate_id=${encodeURIComponent(candidateId)}`);
       if (res.ok) {
         const data = await res.json();
         setDbTasks(data);
@@ -66,7 +68,7 @@ export default function App() {
 
     setIsClearing(true);
     try {
-      const res = await fetch(`/api/reset?candidate_id=${encodeURIComponent(candidateId)}`, {
+      const res = await fetch(`${API_BASE}/api/reset?candidate_id=${encodeURIComponent(candidateId)}`, {
         method: 'DELETE'
       });
 
@@ -113,7 +115,7 @@ export default function App() {
   const handleGenerateSampleBatch = async () => {
     setIsGenerating(true);
     try {
-      const res = await fetch('/api/sample-emails?count=250');
+      const res = await fetch(`${API_BASE}/api/sample-emails?count=250`);
       if (res.ok) {
         const data = await res.json();
         setParsedEmails(data.emails);
@@ -135,7 +137,7 @@ export default function App() {
     setIsProcessing(true);
     try {
       const batchToSend = parsedEmails.slice(0, 100);
-      const res = await fetch('/ingest', {
+      const res = await fetch(`${API_BASE}/ingest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -175,7 +177,7 @@ export default function App() {
 
   const handleReassignTask = async (taskId, newAssignee) => {
     try {
-      const res = await fetch(`/tasks/${taskId}`, {
+      const res = await fetch(`${API_BASE}/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -212,7 +214,7 @@ export default function App() {
     setIsChatLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
