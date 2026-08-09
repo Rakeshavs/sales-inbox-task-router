@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Send, Upload, Sparkles, Database, MessageSquare, Table, RefreshCw, DatabaseZap, CheckCircle2, AlertCircle, HelpCircle, Mail, Layers, ShieldCheck, Filter, UserCheck, Tag, ArrowRight, Users, Briefcase, DollarSign, Megaphone, Handshake, AlertTriangle } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
+const rawApiBase = import.meta.env.VITE_API_URL || '';
+const API_BASE = rawApiBase.replace(/\/+$/, '');
 
 export default function App() {
   const [candidateId, setCandidateId] = useState('medharirakeshavs@gmail.com');
