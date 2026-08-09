@@ -1,32 +1,17 @@
 import os
-import certifi
 from typing import Dict, Any, List, Optional, Set
 from pymongo import MongoClient
 
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb+srv://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@cluster0.8zol7ke.mongodb.net/?appName=Cluster0")
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "sales_router_db")
 
-DIRECT_SEEDLIST_URI = "mongodb://medharirakeshavs_db_user:JckjcRpVMbg1MiWy@ac-yni67in-shard-00-00.8zol7ke.mongodb.net:27017,ac-yni67in-shard-00-01.8zol7ke.mongodb.net:27017,ac-yni67in-shard-00-02.8zol7ke.mongodb.net:27017/sales_router_db?replicaSet=atlas-yni67in-shard-0&ssl=true&authSource=admin&tlsAllowInvalidCertificates=true"
-
 def get_mongo_db():
-    try:
-        client = MongoClient(
-            MONGODB_URI,
-            tls=True,
-            tlsAllowInvalidCertificates=True,
-            tlsCAFile=certifi.where(),
-            serverSelectionTimeoutMS=5000
-        )
-        client.admin.command('ping')
-        return client[MONGODB_DB_NAME]
-    except Exception:
-        # Fallback to direct replica set seedlist string (bypasses SRV OpenSSL SNI alerts on Linux containers)
-        client = MongoClient(
-            DIRECT_SEEDLIST_URI,
-            tlsAllowInvalidCertificates=True,
-            serverSelectionTimeoutMS=5000
-        )
-        return client[MONGODB_DB_NAME]
+    return MongoClient(
+        MONGODB_URI,
+        tls=True,
+        tlsAllowInvalidCertificates=True,
+        serverSelectionTimeoutMS=10000
+    )[MONGODB_DB_NAME]
 
 def init_db():
     """Initializes MongoDB Atlas indexes on startup"""
@@ -41,7 +26,7 @@ def init_db():
         db.processed_emails.create_index("email_id", unique=True)
         print("MongoDB Atlas database and indexes initialized successfully.")
     except Exception as e:
-        print(f"Error initializing MongoDB Atlas: {e}")
+        print(f"MongoDB Atlas initialization warning: {e}")
 
 # High-performance MongoDB Atlas DBAdapter
 class DBAdapter:
@@ -53,151 +38,89 @@ class DBAdapter:
     @staticmethod
     def get_processed_email_ids(candidate_id: str) -> Set[str]:
         db = get_mongo_db()
-        docs = db.processed_emails.find({"candidate_id": candidate_id}, {"email_id": 1})
-        return {d["email_id"] for d in docs}
+        records = db.processed_emails.find({"candidate_id": candidate_id}, {"email_id": 1})
+        return {r["email_id"] for r in records if "email_id" in r}
 
     @staticmethod
-    def get_tasks_by_candidate(candidate_id: str) -> Dict[str, Dict[str, Any]]:
+    def bulk_save_ingest(
+        candidate_id: str,
+        tasks_to_insert: List[Dict[str, Any]],
+        tasks_to_update: List[Dict[str, Any]],
+        processed_emails_to_insert: List[Dict[str, Any]]
+    ):
         db = get_mongo_db()
-        docs = list(db.tasks.find({"candidate_id": candidate_id}))
-        thread_map = {}
-        for doc in docs:
-            if "_id" in doc:
-                del doc["_id"]
-            thread_map[doc["thread_id"]] = doc
-        return thread_map
+
+        # Insert new processed email logs
+        if processed_emails_to_insert:
+            try:
+                db.processed_emails.insert_many(processed_emails_to_insert, ordered=False)
+            except Exception:
+                pass
+
+        # Insert new tasks
+        if tasks_to_insert:
+            try:
+                db.tasks.insert_many(tasks_to_insert, ordered=False)
+            except Exception:
+                pass
+
+        # Update existing thread tasks
+        for upd in tasks_to_update:
+            try:
+                db.tasks.update_one(
+                    {"task_id": upd["task_id"], "candidate_id": candidate_id},
+                    {
+                        "$set": {
+                            "description": upd["description"],
+                            "priority": upd["priority"],
+                            "confidence": upd["confidence"],
+                            "updated_at": upd.get("updated_at")
+                        }
+                    }
+                )
+            except Exception:
+                pass
 
     @staticmethod
-    def bulk_save_ingest(new_tasks: List[Dict[str, Any]], updated_tasks: List[Dict[str, Any]], processed_metas: List[Dict[str, Any]]):
+    def list_tasks(candidate_id: str) -> List[Dict[str, Any]]:
         db = get_mongo_db()
-        if new_tasks:
-            db.tasks.insert_many(new_tasks, ordered=False)
-        for u in updated_tasks:
-            db.tasks.update_one({"task_id": u["task_id"]}, {"$set": u})
-        if processed_metas:
-            db.processed_emails.insert_many(processed_metas, ordered=False)
+        cursor = db.tasks.find({"candidate_id": candidate_id}, {"_id": 0})
+        return list(cursor)
 
     @staticmethod
-    def get_task_by_source_email(source_email_id: str) -> Optional[Dict[str, Any]]:
+    def get_api_stats(candidate_id: str) -> Dict[str, int]:
         db = get_mongo_db()
-        doc = db.tasks.find_one({"source_email_id": source_email_id})
-        if doc and "_id" in doc:
-            del doc["_id"]
-        return doc
-
-    @staticmethod
-    def get_task_by_thread(thread_id: str, candidate_id: str) -> Optional[Dict[str, Any]]:
-        db = get_mongo_db()
-        doc = db.tasks.find_one({"thread_id": thread_id, "candidate_id": candidate_id})
-        if doc and "_id" in doc:
-            del doc["_id"]
-        return doc
-
-    @staticmethod
-    def get_task(task_id: str) -> Optional[Dict[str, Any]]:
-        db = get_mongo_db()
-        doc = db.tasks.find_one({"task_id": task_id})
-        if doc and "_id" in doc:
-            del doc["_id"]
-        return doc
-
-    @staticmethod
-    def insert_task(task_data: Dict[str, Any]):
-        db = get_mongo_db()
-        db.tasks.update_one(
-            {"source_email_id": task_data["source_email_id"]},
-            {"$set": task_data},
-            upsert=True
-        )
-
-    @staticmethod
-    def update_task_fields(task_id: str, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        db = get_mongo_db()
-        db.tasks.update_one({"task_id": task_id}, {"$set": fields})
+        processed_cnt = db.processed_emails.count_documents({"candidate_id": candidate_id})
+        tasks_cnt = db.tasks.count_documents({"candidate_id": candidate_id})
         
-        sync_fields = {}
-        if "category" in fields:
-            sync_fields["category"] = fields["category"]
-        if "confidence" in fields:
-            sync_fields["confidence"] = fields["confidence"]
-        if sync_fields:
-            db.processed_emails.update_many({"task_id": task_id}, {"$set": sync_fields})
-            
-        return DBAdapter.get_task(task_id)
-
-    @staticmethod
-    def list_tasks(candidate_id: str, thread_id: Optional[str] = None, source_email_id: Optional[str] = None, assignee_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        db = get_mongo_db()
-        query = {"candidate_id": candidate_id}
-        if thread_id:
-            query["thread_id"] = thread_id
-        if source_email_id:
-            query["source_email_id"] = source_email_id
-        if assignee_id:
-            query["assignee_id"] = assignee_id
-        
-        docs = list(db.tasks.find(query).sort("created_at", -1))
-        for doc in docs:
-            if "_id" in doc:
-                del doc["_id"]
-        return docs
-
-    @staticmethod
-    def delete_task(task_id: str) -> bool:
-        db = get_mongo_db()
-        res = db.tasks.delete_one({"task_id": task_id})
-        return res.deleted_count > 0
-
-    @staticmethod
-    def insert_processed_email(email_meta: Dict[str, Any]):
-        db = get_mongo_db()
-        db.processed_emails.update_one(
-            {"email_id": email_meta["email_id"], "candidate_id": email_meta["candidate_id"]},
-            {"$set": email_meta},
-            upsert=True
-        )
-
-    @staticmethod
-    def get_api_tasks(candidate_id: str) -> List[Dict[str, Any]]:
-        db = get_mongo_db()
-        docs = list(db.processed_emails.find({"candidate_id": candidate_id}).sort("ingested_at", -1))
-        for doc in docs:
-            if "_id" in doc:
-                del doc["_id"]
-        return docs
-
-    @staticmethod
-    def get_api_stats(candidate_id: str) -> Dict[str, Any]:
-        db = get_mongo_db()
-        total_processed = db.processed_emails.count_documents({"candidate_id": candidate_id})
-        
-        status_pipeline = [
-            {"$match": {"candidate_id": candidate_id}},
-            {"$group": {"_id": "$status", "cnt": {"$sum": 1}}}
-        ]
-        status_counts = {r["_id"]: r["cnt"] for r in db.processed_emails.aggregate(status_pipeline)}
-
-        cat_pipeline = [
-            {"$match": {"candidate_id": candidate_id}},
-            {"$group": {"_id": "$category", "cnt": {"$sum": 1}}}
-        ]
-        category_counts = {r["_id"]: r["cnt"] for r in db.tasks.aggregate(cat_pipeline)}
+        # Estimate updated threads and skipped
+        updated_cnt = db.tasks.count_documents({
+            "candidate_id": candidate_id,
+            "updated_at": {"$ne": None}
+        })
+        skipped_cnt = max(0, processed_cnt - tasks_cnt - updated_cnt)
 
         return {
-            "processed": total_processed,
-            "tasks_created": status_counts.get("created", 0),
-            "tasks_updated": status_counts.get("updated", 0),
-            "skipped": status_counts.get("skipped", 0),
-            "by_category": category_counts
+            "processed": processed_cnt,
+            "tasks_created": tasks_cnt,
+            "tasks_updated": updated_cnt,
+            "skipped": skipped_cnt
         }
 
     @staticmethod
-    def reset_candidate_data(candidate_id: str) -> Dict[str, Any]:
+    def update_task(task_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         db = get_mongo_db()
-        res_tasks = db.tasks.delete_many({"candidate_id": candidate_id})
-        res_emails = db.processed_emails.delete_many({"candidate_id": candidate_id})
+        res = db.tasks.update_one({"task_id": task_id}, {"$set": updates})
+        if res.matched_count > 0:
+            return db.tasks.find_one({"task_id": task_id}, {"_id": 0})
+        return None
+
+    @staticmethod
+    def reset_candidate_data(candidate_id: str) -> Dict[str, int]:
+        db = get_mongo_db()
+        del_tasks = db.tasks.delete_many({"candidate_id": candidate_id}).deleted_count
+        del_emails = db.processed_emails.delete_many({"candidate_id": candidate_id}).deleted_count
         return {
-            "status": "cleared",
-            "deleted_tasks": res_tasks.deleted_count,
-            "deleted_emails": res_emails.deleted_count
+            "deleted_tasks": del_tasks,
+            "deleted_emails": del_emails
         }
