@@ -2,9 +2,9 @@
 
 ### Candidate & Deployment Information
 - **`candidate_id`**: `medharirakeshavs@gmail.com`
-- **Backend API URL**: `https://sales-router-backend.onrender.com`
+- **Backend API URL**: `https://sales-inbox-task-router-qgl7.onrender.com`
 - **Frontend App URL**: `https://sales-router-frontend.vercel.app`
-- **Chat Endpoint**: `https://sales-router-backend.onrender.com/api/chat`
+- **Chat Endpoint**: `https://sales-inbox-task-router-qgl7.onrender.com/api/chat`
 
 ---
 
