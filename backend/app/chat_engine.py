@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Dict, Any, Tuple
-from app.database import get_mongo_db
+from app.database import get_mongo_db, get_sqlite_conn
 from app.task_api import normalize_candidate_id
 
 try:
@@ -32,24 +32,36 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
         }
 
     supporting_data: Dict[str, Any] = {}
-    db = get_mongo_db()
 
-    total_processed = db.processed_emails.count_documents({"candidate_id": norm_cand})
-    total_tasks = db.tasks.count_documents({"candidate_id": norm_cand})
+    try:
+        db = get_mongo_db()
+        total_processed = db.processed_emails.count_documents({"candidate_id": norm_cand})
+        total_tasks = db.tasks.count_documents({"candidate_id": norm_cand})
 
-    # Category aggregation pipeline
-    cat_pipeline = [
-        {"$match": {"candidate_id": norm_cand}},
-        {"$group": {"_id": "$category", "cnt": {"$sum": 1}}}
-    ]
-    cat_counts = {r["_id"]: r["cnt"] for r in db.tasks.aggregate(cat_pipeline)}
+        # Category aggregation pipeline
+        cat_pipeline = [
+            {"$match": {"candidate_id": norm_cand}},
+            {"$group": {"_id": "$category", "cnt": {"$sum": 1}}}
+        ]
+        cat_counts = {r["_id"]: r["cnt"] for r in db.tasks.aggregate(cat_pipeline)}
 
-    # Skipped aggregation pipeline
-    skip_pipeline = [
-        {"$match": {"candidate_id": norm_cand, "status": "skipped"}},
-        {"$group": {"_id": "$skip_reason", "cnt": {"$sum": 1}}}
-    ]
-    skipped_counts = {r["_id"] or "unknown": r["cnt"] for r in db.processed_emails.aggregate(skip_pipeline)}
+        # Skipped aggregation pipeline
+        skip_pipeline = [
+            {"$match": {"candidate_id": norm_cand, "status": "skipped"}},
+            {"$group": {"_id": "$skip_reason", "cnt": {"$sum": 1}}}
+        ]
+        skipped_counts = {r["_id"] or "unknown": r["cnt"] for r in db.processed_emails.aggregate(skip_pipeline)}
+    except Exception:
+        conn = get_sqlite_conn()
+        total_processed = conn.execute("SELECT COUNT(*) FROM processed_emails WHERE candidate_id = ?", (norm_cand,)).fetchone()[0]
+        total_tasks = conn.execute("SELECT COUNT(*) FROM tasks WHERE candidate_id = ?", (norm_cand,)).fetchone()[0]
+
+        cat_rows = conn.execute("SELECT category, COUNT(*) FROM tasks WHERE candidate_id = ? GROUP BY category", (norm_cand,)).fetchall()
+        cat_counts = {r[0]: r[1] for r in cat_rows if r[0]}
+
+        skip_rows = conn.execute("SELECT skip_reason, COUNT(*) FROM processed_emails WHERE candidate_id = ? AND status = 'skipped' GROUP BY skip_reason", (norm_cand,)).fetchall()
+        skipped_counts = {r[0] or "unknown": r[1] for r in skip_rows}
+        conn.close()
 
     # Check Employee Name Queries (Aarti Menon, Rohit Sharma, Meera Iyer, Karan Doshi, Divya Rao)
     matched_member = None
@@ -60,7 +72,15 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
 
     if matched_member:
         assignee_id, full_name, dept = matched_member
-        user_tasks = list(db.tasks.find({"candidate_id": norm_cand, "assignee_id": assignee_id}))
+        try:
+            db = get_mongo_db()
+            user_tasks = list(db.tasks.find({"candidate_id": norm_cand, "assignee_id": assignee_id}))
+        except Exception:
+            conn = get_sqlite_conn()
+            rows = conn.execute("SELECT * FROM tasks WHERE candidate_id = ? AND assignee_id = ?", (norm_cand, assignee_id)).fetchall()
+            conn.close()
+            user_tasks = [dict(r) for r in rows]
+
         t_count = len(user_tasks)
         tot_val = sum([t.get("deal_value_inr") or 0 for t in user_tasks if t.get("deal_value_inr")])
         
@@ -84,13 +104,34 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
         supporting_data["marketing"] = mkt_count
         supporting_data["skipped_marketing_lookalike_spam"] = spam_count
 
+    # Q: Triage items
+    elif "triage" in query_lower:
+        try:
+            db = get_mongo_db()
+            triage_tasks = list(db.tasks.find({"candidate_id": norm_cand, "assignee_id": "u_triage"}))
+        except Exception:
+            conn = get_sqlite_conn()
+            rows = conn.execute("SELECT * FROM tasks WHERE candidate_id = ? AND assignee_id = 'u_triage'", (norm_cand,)).fetchall()
+            conn.close()
+            triage_tasks = [dict(r) for r in rows]
+
+        supporting_data["triage_count"] = len(triage_tasks)
+        supporting_data["triage_task_ids"] = [t["task_id"] for t in triage_tasks]
+
     # Q: Spurious rate
     elif "spurious" in query_lower or "error rate" in query_lower:
-        spurious_cnt = db.processed_emails.count_documents({
-            "candidate_id": norm_cand,
-            "status": "created",
-            "skip_reason": {"$ne": None}
-        })
+        try:
+            db = get_mongo_db()
+            spurious_cnt = db.processed_emails.count_documents({
+                "candidate_id": norm_cand,
+                "status": "created",
+                "skip_reason": {"$ne": None}
+            })
+        except Exception:
+            conn = get_sqlite_conn()
+            spurious_cnt = conn.execute("SELECT COUNT(*) FROM processed_emails WHERE candidate_id = ? AND status = 'created' AND skip_reason IS NOT NULL", (norm_cand,)).fetchone()[0]
+            conn.close()
+
         rate = round(spurious_cnt / total_processed, 4) if total_processed > 0 else 0.0
         supporting_data["spurious_count"] = spurious_cnt
         supporting_data["processed"] = total_processed
@@ -98,11 +139,19 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
 
     # Q: High priority low confidence
     elif "high priority" in query_lower and ("confidence" in query_lower or "unassigned" in query_lower):
-        matches = list(db.tasks.find({
-            "candidate_id": norm_cand,
-            "priority": "high",
-            "confidence": {"$lt": 0.60}
-        }))
+        try:
+            db = get_mongo_db()
+            matches = list(db.tasks.find({
+                "candidate_id": norm_cand,
+                "priority": "high",
+                "confidence": {"$lt": 0.60}
+            }))
+        except Exception:
+            conn = get_sqlite_conn()
+            rows = conn.execute("SELECT * FROM tasks WHERE candidate_id = ? AND priority = 'high' AND confidence < 0.60", (norm_cand,)).fetchall()
+            conn.close()
+            matches = [dict(r) for r in rows]
+
         supporting_data["matches"] = [{"task_id": m["task_id"], "confidence": m["confidence"]} for m in matches]
 
     # Q: Alliances
@@ -115,7 +164,15 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
 
     # Q: Deal value
     elif "deal value" in query_lower or "budget" in query_lower:
-        rfp_docs = list(db.tasks.find({"candidate_id": norm_cand, "category": "enterprise_rfp"}))
+        try:
+            db = get_mongo_db()
+            rfp_docs = list(db.tasks.find({"candidate_id": norm_cand, "category": "enterprise_rfp"}))
+        except Exception:
+            conn = get_sqlite_conn()
+            rows = conn.execute("SELECT * FROM tasks WHERE candidate_id = ? AND category = 'enterprise_rfp'", (norm_cand,)).fetchall()
+            conn.close()
+            rfp_docs = [dict(r) for r in rows]
+
         tot_val = sum([d.get("deal_value_inr") or 0 for d in rfp_docs if d.get("deal_value_inr") is not None])
         no_val = len([d for d in rfp_docs if d.get("deal_value_inr") is None])
         supporting_data["total_deal_value_inr"] = tot_val
@@ -123,11 +180,19 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
 
     # Q: Thread updates
     elif "thread" in query_lower and ("updated" in query_lower or "multiple" in query_lower or "once" in query_lower):
-        updated_pipeline = [
-            {"$match": {"candidate_id": norm_cand, "status": "updated"}},
-            {"$group": {"_id": "$thread_id", "cnt": {"$sum": 1}}}
-        ]
-        updated_threads = [r["_id"] for r in db.processed_emails.aggregate(updated_pipeline)]
+        try:
+            db = get_mongo_db()
+            updated_pipeline = [
+                {"$match": {"candidate_id": norm_cand, "status": "updated"}},
+                {"$group": {"_id": "$thread_id", "cnt": {"$sum": 1}}}
+            ]
+            updated_threads = [r["_id"] for r in db.processed_emails.aggregate(updated_pipeline)]
+        except Exception:
+            conn = get_sqlite_conn()
+            rows = conn.execute("SELECT thread_id FROM processed_emails WHERE candidate_id = ? AND status = 'updated' GROUP BY thread_id", (norm_cand,)).fetchall()
+            conn.close()
+            updated_threads = [r[0] for r in rows if r[0]]
+
         supporting_data["threads_updated_multiple_times"] = updated_threads
 
     if not supporting_data:
@@ -146,12 +211,12 @@ def query_chat_engine(candidate_id: str, query: str) -> Dict[str, Any]:
             model = genai.GenerativeModel("gemini-1.5-flash")
             
             prompt = f"""
-You are an operations assistant phrasing a query response based STRICTLY on computed MongoDB Atlas data.
+You are an operations assistant phrasing a query response based STRICTLY on computed database data.
 Do NOT invent numbers or fabricate facts.
 
 User Question: "{query}"
 
-Computed Supporting Data from MongoDB Atlas:
+Computed Supporting Data from Database:
 {json.dumps(supporting_data, indent=2)}
 
 Instructions:
@@ -182,7 +247,7 @@ def format_fallback_answer(query_lower: str, supporting_data: dict, cat_counts: 
         dept = supporting_data.get("department", "")
         val = supporting_data.get("total_pipeline_value_inr")
         val_str = f" with total pipeline value ₹{val:,}" if val else ""
-        return f"{name} ({dept}) currently has {cnt} task(s) assigned in MongoDB Atlas{val_str}."
+        return f"{name} ({dept}) currently has {cnt} task(s) assigned{val_str}."
 
     if "gst refund" in query_lower or "refund" in query_lower:
         return "Zero emails were about GST refunds."
@@ -231,3 +296,4 @@ def format_fallback_answer(query_lower: str, supporting_data: dict, cat_counts: 
         return f"The following thread(s) received updates: {', '.join(updated)}."
 
     return f"Processed {total_processed} emails total. Tasks breakdown: {json.dumps(cat_counts)}."
+
